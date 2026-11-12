@@ -1,0 +1,152 @@
+{
+  "model": "qwen3.8-max",
+  "dataset": "synthetic product seed; not v1.1.0-equivalent fixture",
+  "results": [
+    {
+      "case": "round1-B24-01",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round1-B24-02",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round1-B24-03",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round1-B24-04",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round1-B34-A",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round1-B34-C",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round2-B24-01",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round2-B24-02",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round2-B24-03",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round2-B24-04",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round2-B34-A",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round2-B34-C",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round3-B24-01",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round3-B24-02",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round3-B24-03",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round3-B24-04",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round3-B34-A",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "round3-B34-C",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "P6-B32-initial",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "P6-B10-created",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "P6-B32-restart",
+      "status": "passed",
+      "completion": "model"
+    },
+    {
+      "case": "P6-B10-deleted",
+      "status": "passed",
+      "completion": "model"
+    }
+  ],
+  "initial_dump_sha256": "e38e6ad8ceb12c4fa586f86d5615cb78e28b59ea40db93d3ef34a8372ac78a3c",
+  "round_resets": [
+    {
+      "round": 1,
+      "state_sha256": "1f9db60a98d0bc16d494f8408dac9f2d810ff7509d455fcb7ef37f13fd6bd25a",
+      "dump_sha256": "e38e6ad8ceb12c4fa586f86d5615cb78e28b59ea40db93d3ef34a8372ac78a3c"
+    },
+    {
+      "round": 2,
+      "state_sha256": "1f9db60a98d0bc16d494f8408dac9f2d810ff7509d455fcb7ef37f13fd6bd25a",
+      "dump_sha256": "e38e6ad8ceb12c4fa586f86d5615cb78e28b59ea40db93d3ef34a8372ac78a3c"
+    },
+    {
+      "round": 3,
+      "state_sha256": "1f9db60a98d0bc16d494f8408dac9f2d810ff7509d455fcb7ef37f13fd6bd25a",
+      "dump_sha256": "e38e6ad8ceb12c4fa586f86d5615cb78e28b59ea40db93d3ef34a8372ac78a3c"
+    }
+  ],
+  "agent_source_sha256": "0f20fad3084bb209474bd08a7229f0b3ca9a09a6dfe348b5e1132261d4fefb58",
+  "runtime_agent_sha256": "0f20fad3084bb209474bd08a7229f0b3ca9a09a6dfe348b5e1132261d4fefb58",
+  "source_git_commit": "72f6899ca86f52aa48b8ac2fd600c58c06e6fbb6",
+  "passed": 22,
+  "failed": 0,
+  "program_fallback": 0,
+  "usage": {
+    "prompt_tokens": 253177,
+    "completion_tokens": 29347,
+    "total_tokens": 282524
+  },
+  "model_calls": 43,
+  "usage_missing_calls": 0,
+  "six_case_counts": {
+    "model": 18,
+    "program": 0,
+    "failed": 0
+  }
+}

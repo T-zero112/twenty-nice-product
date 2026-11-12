@@ -1,5 +1,7 @@
 """Offline unit test for import_contest_data.py (no Docker needed): python -m unittest product/test_import_contest_data.py"""
+import contextlib
 import datetime as dt
+import io
 import hashlib
 import os
 from pathlib import Path
@@ -79,6 +81,45 @@ class ImporterTest(unittest.TestCase):
         finally:
             m.DIRECT_DB = None
             del sys.modules["psycopg"]
+
+    def test_verify_password_roundtrip(self):
+        stored = m.password_hash("Demo-u001-2026!")
+        self.assertTrue(m.verify_password("Demo-u001-2026!", stored))
+        self.assertFalse(m.verify_password("Demo-u002-2026!", stored))
+        self.assertFalse(m.verify_password("x", "not-a-hash"))
+
+    def test_existing_account_is_not_reset_without_flag(self):
+        stored = m.password_hash("old-random-value-123")
+        executed, out = [], io.StringIO()
+        def fake_psql(project, sql, csv=False):
+            executed.append(sql)
+            return f"u001|{stored}" if csv else ""
+        original = m.psql
+        m.psql = fake_psql
+        try:
+            with contextlib.redirect_stdout(out):
+                m.account_report("p", {"u001": "Demo-u001-2026!", "u002": "Demo-u002-2026!"})
+            self.assertFalse(any(q.startswith("UPDATE") for q in executed))
+            self.assertIn("WARNING u001 password differs", out.getvalue())
+            self.assertIn("u002 not created yet", out.getvalue())
+            self.assertNotIn("Demo-u001-2026!", out.getvalue())
+            with contextlib.redirect_stdout(io.StringIO()):
+                m.account_report("p", {"u001": "Demo-u001-2026!", "u002": ""}, reset=True)
+            self.assertTrue(any(q.startswith("UPDATE product_account") and "'u001'" in q for q in executed))
+        finally:
+            m.psql = original
+
+    def test_env_example_demo_passwords_are_kept(self):
+        example = Path(m.__file__).resolve().parent / ".env.example"
+        config = m.read_env(example)[1]
+        self.assertEqual((config["PRODUCT_U001_PASSWORD"], config["PRODUCT_U002_PASSWORD"]), ("Demo-u001-2026!", "Demo-u002-2026!"))
+        with tempfile.TemporaryDirectory() as d:
+            env = Path(d) / ".env"
+            env.write_bytes(example.read_bytes())
+            passwords, added = m.ensure_passwords(env)
+            self.assertEqual(added, [])
+            self.assertEqual(passwords["u001"], "Demo-u001-2026!")
+        self.assertTrue(all(12 <= len(v) <= 256 for v in passwords.values()))
 
     def test_env_passwords_appended_once(self):
         with tempfile.TemporaryDirectory() as d:

@@ -18,10 +18,23 @@ done
 token() { od -An -tx1 -N16 /dev/urandom | tr -d ' \n'; }
 
 if [ ! -f .env ]; then
+  # New install: start from .env.example so the documented demo passwords (u001/u002) are kept;
+  # only the empty infrastructure secrets get random values. Existing .env files are never rewritten.
   (umask 077
-   for setting in DB_PASSWORD AGENT_TOKEN ALPHA_PASSWORD BETA_PASSWORD; do
-     echo "PRODUCT_${setting}=$(token)"
-   done > .env)
+   if [ -f .env.example ]; then
+     while IFS= read -r line || [ -n "$line" ]; do
+       line=${line%$'\r'}
+       case "$line" in
+         PRODUCT_DB_PASSWORD=|PRODUCT_AGENT_TOKEN=|PRODUCT_ALPHA_PASSWORD=|PRODUCT_BETA_PASSWORD=|PRODUCT_IMPORT_TOKEN=|PRODUCT_S3_PASSWORD=)
+           printf '%s%s\n' "$line" "$(token)" ;;
+         *) printf '%s\n' "$line" ;;
+       esac
+     done < .env.example > .env
+   else
+     for setting in DB_PASSWORD AGENT_TOKEN ALPHA_PASSWORD BETA_PASSWORD; do
+       echo "PRODUCT_${setting}=$(token)"
+     done > .env
+   fi)
 fi
 for setting in IMPORT_TOKEN S3_PASSWORD; do
   grep -q "^PRODUCT_${setting}=" .env || echo "PRODUCT_${setting}=$(token)" >> .env
@@ -29,7 +42,12 @@ done
 for setting in MODEL_BASE_URL MODEL_NAME MODEL_API_KEY; do
   grep -q "^PRODUCT_${setting}=" .env || echo "PRODUCT_${setting}=" >> .env
 done
-echo 'Chat needs PRODUCT_MODEL_BASE_URL and PRODUCT_MODEL_NAME in product/.env.'
+# Model settings: only names are printed, never values.
+missing=''
+for setting in MODEL_BASE_URL MODEL_NAME MODEL_API_KEY; do
+  grep -q "^PRODUCT_${setting}=[[:space:]]*[^[:space:]]" .env || missing="${missing:+$missing, }PRODUCT_${setting}"
+done
+[ -z "$missing" ] || echo "Chat (model answers) needs ${missing} in product/.env; login, data and rules work without it."
 
 files=(-f compose.yaml)
 if [ "$https" = 1 ]; then

@@ -13,13 +13,13 @@
 
 ### 配置变量
 
-在 `product/` 将 `.env.example` 复制为 `.env`。若目录中还没有 `.env`，直接运行启动脚本也会生成一份，并写入数据库、会话和演示账号等凭据的随机值；无论哪种方式，都需要再填写模型相关变量。
+若 `product/` 中还没有 `.env`，启动脚本会以 `.env.example` 为模板生成一份：数据库、会话、alpha/beta 等凭据写入随机值，u001/u002 演示密码和官方评测模型地址、名称按模板保留。生成后只需填写 `PRODUCT_MODEL_API_KEY`，没填时启动脚本会提示。已有的 `.env` 不会被改写。
 
 只填写变量，不要把实际密钥写入说明、截图或源码包。模型相关变量名如下：
 
 ```dotenv
-PRODUCT_MODEL_BASE_URL=
-PRODUCT_MODEL_NAME=
+PRODUCT_MODEL_BASE_URL=https://maas.qianwenaiapi.com/compatible-mode/v1
+PRODUCT_MODEL_NAME=qwen3.8-max
 PRODUCT_MODEL_API_KEY=
 PRODUCT_MODEL_STRUCTURED=
 PRODUCT_MODEL_TIMEOUT=
@@ -30,12 +30,12 @@ PRODUCT_CONTEXT_BUDGET=24000
 
 - `PRODUCT_MODEL_BASE_URL`：OpenAI 兼容 Chat Completions 地址，填写到 `/v1`。
 - `PRODUCT_MODEL_NAME`：模型名称。
-- `PRODUCT_MODEL_API_KEY`：若服务要求鉴权则填写；未配置模型地址或名称时，对话接口返回 503，其他工作台功能仍可使用。
+- `PRODUCT_MODEL_API_KEY`：若服务要求鉴权则填写。模板已预填官方评测模型的地址和名称（非密钥），只有 Key 留空。Key 为空时，对话会返回 `model_http_error`，待办保留。未配置模型地址或名称时，对话接口返回 503。两种情况下其他工作台功能都可使用。
 - `PRODUCT_MODEL_STRUCTURED`：`schema` 或 `none`，未填写时按 `none`。
 - `PRODUCT_MODEL_TIMEOUT`：单次模型调用超时秒数，未填写时为 120，允许范围 1 至 300。
 - `PRODUCT_CONTEXT_BUDGET`：模型输入预算，单位字节，限制在 4096 至 48000。代码未填写时缺省 12000，但官方约 10 张发票的月度查询会超出该值；**推荐填写 24000**。主工作台已按 24000 核对通过。
 
-同文件中的 `PRODUCT_DB_PASSWORD`、`PRODUCT_AGENT_TOKEN`、`PRODUCT_ALPHA_PASSWORD`、`PRODUCT_BETA_PASSWORD`、`PRODUCT_IMPORT_TOKEN`、`PRODUCT_S3_PASSWORD` 由首次启动写入，仅保存在本地 `.env`。导入官方数据后还会用到 `PRODUCT_U001_PASSWORD`、`PRODUCT_U002_PASSWORD`（缺少时由导入脚本生成并追加，不会打印）。
+同文件中的 `PRODUCT_DB_PASSWORD`、`PRODUCT_AGENT_TOKEN`、`PRODUCT_ALPHA_PASSWORD`、`PRODUCT_BETA_PASSWORD`、`PRODUCT_IMPORT_TOKEN`、`PRODUCT_S3_PASSWORD` 由首次启动写入，仅保存在本地 `.env`。`PRODUCT_U001_PASSWORD`、`PRODUCT_U002_PASSWORD` 在模板中是公开演示密码（见下文测试账号）。为空或缺少时，由导入脚本生成随机值并追加，不会打印。
 
 ### 启动命令
 
@@ -74,10 +74,16 @@ docker compose -f product/compose.yaml -f product/compose.https.yaml --env-file 
 - `alpha`：企业管理员，密码见本地 `.env` 的 `PRODUCT_ALPHA_PASSWORD`。
 - `beta`：查看者，密码见本地 `.env` 的 `PRODUCT_BETA_PASSWORD`。查看者可以查询和核验，不能保存修改。
 
-官方 v1.1.0 数据在独立租户 `contest`（主工作台 `https://localhost:3443/` 与隔离实例 `https://localhost:13451/` 均已导入并核对）：
+官方 v1.1.0 数据在独立租户 `contest`。`start.ps1` / `start.sh` 启动时会自动导入。新安装直接使用下表的公开演示密码，不用打开 `.env`：
 
-- `u001`：C001 甲企业、C002 乙企业均为 editor，可查看并修改。密码变量 `PRODUCT_U001_PASSWORD`。
-- `u002`：只有 C001 的 viewer 权限。读取乙企业返回 404，对甲企业提交修改返回 403。密码变量 `PRODUCT_U002_PASSWORD`。
+| 账号 | 密码 | 权限 |
+|---|---|---|
+| `u001` | `Demo-u001-2026!` | C001 甲企业、C002 乙企业均为 editor，可查看并修改用途和备注 |
+| `u002` | `Demo-u002-2026!` | 只有 C001 甲企业的 viewer 权限：读取乙企业返回 404，对甲企业提交修改返回 403 |
+
+- 这两个密码来自 `product/.env.example`，只在**首次启动、`product/.env` 尚不存在**时写入。它们仅供本机评测，任何非本机部署都要先修改。
+- 已有安装不会被改密码。例如本机主工作台（3443）和隔离实例（13451）仍使用各自 `.env` 中 `PRODUCT_U001_PASSWORD`、`PRODUCT_U002_PASSWORD` 原来的随机值。详见 [数据导入说明](数据导入说明.md)。
+- alpha/beta 合成数据账号仍是随机密码，见上文。
 
 登录名是小写。不能通过对话更改身份或权限。导入步骤见 [数据导入说明.md](数据导入说明.md)。
 

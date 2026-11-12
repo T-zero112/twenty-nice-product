@@ -3,7 +3,10 @@
 Loads into a dedicated tenant `contest` so the synthetic alpha/beta fixtures used by the verify_* scripts stay intact:
   - enterprises C001 甲企业（比赛模拟）, C002 乙企业（比赛模拟）
   - accounts u001 (editor on C001+C002) and u002 (viewer on C001 only); passwords come from product/.env
-    PRODUCT_U001_PASSWORD / PRODUCT_U002_PASSWORD and are generated and appended there when missing (never printed)
+    PRODUCT_U001_PASSWORD / PRODUCT_U002_PASSWORD. New installs get the public demo values from .env.example
+    (start.ps1/start.sh copy it); a random value is generated and appended only when the variable is absent or empty
+    (never printed). Existing accounts are never re-hashed by an import: if .env no longer matches the stored hash the
+    importer prints a warning (names only); --reset-contest-passwords sets the hash from .env explicitly.
   - 40 invoices, 48 bank transactions, rules R001-R004 with versions; R002 1.0 is stored as `retired`
 Re-running inserts only missing rows (ON CONFLICT DO NOTHING) and never overwrites purpose/note edits.
 Afterwards the DB is read back and per company-month counts and totals are compared with the workbook.
@@ -150,6 +153,36 @@ def read_env(env_path):
     return lines, dict(l.split("=", 1) for l in lines if "=" in l and not l.startswith("#"))
 
 
+def verify_password(password, stored):
+    """Checks a password against an Accounts.java hash (base64 salt:base64 PBKDF2-HMAC-SHA256, 600000 iterations)."""
+    try:
+        salt, expected = (base64.b64decode(part) for part in stored.split(":"))
+    except (ValueError, AttributeError):
+        return False
+    return secrets.compare_digest(hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 600_000, 32), expected)
+
+
+def account_report(project, passwords, reset=False):
+    """Compares .env passwords with stored hashes; never prints password or hash values."""
+    rows = psql(project, "SELECT username, password_hash FROM product_account WHERE username IN ('u001','u002') ORDER BY 1;",
+                csv=True).splitlines()
+    stored = dict(row.split("|", 1) for row in rows if row)
+    for user in ("u001", "u002"):
+        key = f"PRODUCT_{user.upper()}_PASSWORD"
+        if user not in stored:
+            print(f"accounts: {user} not created yet")
+        elif not passwords.get(user):
+            print(f"accounts: WARNING {user} exists but {key} is not set in .env")
+        elif verify_password(passwords[user], stored[user]):
+            print(f"accounts: {user} password matches {key}")
+        elif reset:
+            psql(project, f"UPDATE product_account SET password_hash={lit(password_hash(passwords[user]))} WHERE username={lit(user)};")
+            print(f"accounts: {user} password reset from {key}")
+        else:
+            print(f"accounts: WARNING {user} password differs from {key}; left unchanged "
+                  "(existing install). Use the stored password, or re-run with --reset-contest-passwords.")
+
+
 def ensure_passwords(env_path):
     lines, config = read_env(env_path)
     added = []
@@ -265,6 +298,8 @@ def main():
                         help="official 02_示例数据.xlsx (default: bundled product/data/contest/02_示例数据.xlsx)")
     parser.add_argument("--check-only", action="store_true", help="only read back and compare, write nothing")
     parser.add_argument("--allow-main", action="store_true", help="required to write outside a tax-product-p8* project")
+    parser.add_argument("--reset-contest-passwords", action="store_true",
+                        help="manual only: set u001/u002 password hashes from .env when they differ (never used by start scripts)")
     args = parser.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
     global DIRECT_DB
@@ -283,10 +318,16 @@ def main():
     computed = summarize(invoices, bank)
     for key, value in published.items():
         assert computed.get(key, EMPTY) == value, ("workbook summary differs from its detail rows", key, value, computed.get(key))
+    if args.check_only and args.reset_contest_passwords:
+        parser.error("--reset-contest-passwords cannot be combined with --check-only")
     if not args.check_only:
         passwords, added = ensure_passwords(ROOT / ".env")
         psql(args.project, build_sql(names, invoices, bank, passwords))
         print("imported; new .env keys:", ", ".join(added) or "none")
+    else:
+        config = read_env(ROOT / ".env")[1]
+        passwords = {u: config.get(f"PRODUCT_{u.upper()}_PASSWORD", "") for u in ("u001", "u002")}
+    account_report(args.project, passwords, reset=args.reset_contest_passwords)
     db, rules, grants = read_back(args.project)
     ok = True
     print("enterprise period  invoices bank  invoice_total  expense_total  income_total  match")

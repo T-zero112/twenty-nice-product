@@ -5,9 +5,20 @@ $previousEncoding = [Console]::OutputEncoding
 Push-Location $PSScriptRoot
 try {
     if (!(Test-Path -LiteralPath '.env')) {
-        'DB_PASSWORD', 'AGENT_TOKEN', 'ALPHA_PASSWORD', 'BETA_PASSWORD' | ForEach-Object {
-            "PRODUCT_$_=" + [guid]::NewGuid().ToString('N')
-        } | Set-Content -LiteralPath '.env' -Encoding ascii
+        if (Test-Path -LiteralPath '.env.example') {
+            # New install: start from .env.example so the documented demo passwords (u001/u002) are kept;
+            # only the empty infrastructure secrets below get random values. Existing .env files are never rewritten.
+            $generated = 'DB_PASSWORD', 'AGENT_TOKEN', 'ALPHA_PASSWORD', 'BETA_PASSWORD', 'IMPORT_TOKEN', 'S3_PASSWORD'
+            Get-Content -LiteralPath '.env.example' | ForEach-Object {
+                if ($_ -match '^PRODUCT_(\w+)=\s*$' -and $generated -contains $Matches[1]) {
+                    "PRODUCT_$($Matches[1])=" + [guid]::NewGuid().ToString('N')
+                } else { $_ }
+            } | Set-Content -LiteralPath '.env' -Encoding ascii
+        } else {
+            'DB_PASSWORD', 'AGENT_TOKEN', 'ALPHA_PASSWORD', 'BETA_PASSWORD' | ForEach-Object {
+                "PRODUCT_$_=" + [guid]::NewGuid().ToString('N')
+            } | Set-Content -LiteralPath '.env' -Encoding ascii
+        }
     }
     foreach ($setting in 'IMPORT_TOKEN', 'S3_PASSWORD') {
         if (!(Select-String -LiteralPath '.env' -Pattern "^PRODUCT_${setting}=" -Quiet)) {
@@ -19,7 +30,15 @@ try {
             "PRODUCT_$setting=" | Add-Content -LiteralPath '.env' -Encoding ascii
         }
     }
-    Write-Host 'Chat needs PRODUCT_MODEL_BASE_URL and PRODUCT_MODEL_NAME in product/.env.'
+    # Model settings: only names are printed, never values.
+    $model = @{}
+    Get-Content -LiteralPath '.env' | ForEach-Object {
+        if ($_ -match '^PRODUCT_(MODEL_BASE_URL|MODEL_NAME|MODEL_API_KEY)=(.*)$') { $model[$Matches[1]] = $Matches[2].Trim() }
+    }
+    $missing = @('MODEL_BASE_URL', 'MODEL_NAME', 'MODEL_API_KEY' | Where-Object { !$model[$_] } | ForEach-Object { "PRODUCT_$_" })
+    if ($missing.Count -gt 0) {
+        Write-Host "Chat (model answers) needs $($missing -join ', ') in product/.env; login, data and rules work without it."
+    }
     $composeFiles = @('-f', 'compose.yaml')
     if ($Https) {
         & (Join-Path $PSScriptRoot 'tls/generate-local.ps1')

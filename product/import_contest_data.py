@@ -12,6 +12,12 @@ Usage (isolated P8 copy):
   python product/import_contest_data.py --project tax-product-p8
   python product/import_contest_data.py --project tax-product-p8 --check-only
   (--xlsx <path> overrides the bundled product/data/contest/02_示例数据.xlsx)
+
+start.ps1 / start.sh run it inside the importer image (Python + openpyxl + psycopg), so the host needs only Docker:
+  docker compose ... run --rm --no-deps -T -v <product>:/work --entrypoint python importer \
+      /work/import_contest_data.py --direct-db --allow-main [--check-only]
+--direct-db connects to the compose service `db` with PRODUCT_DB_PASSWORD from the mounted .env instead of
+`docker compose exec db psql`.
 """
 import argparse
 import base64
@@ -139,9 +145,13 @@ def password_hash(password):
     return base64.b64encode(salt).decode() + ":" + base64.b64encode(derived).decode()
 
 
-def ensure_passwords(env_path):
+def read_env(env_path):
     lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
-    config = dict(l.split("=", 1) for l in lines if "=" in l and not l.startswith("#"))
+    return lines, dict(l.split("=", 1) for l in lines if "=" in l and not l.startswith("#"))
+
+
+def ensure_passwords(env_path):
+    lines, config = read_env(env_path)
     added = []
     for user in ("u001", "u002"):
         key = f"PRODUCT_{user.upper()}_PASSWORD"
@@ -189,7 +199,12 @@ def build_sql(names, invoices, bank, passwords):
     return "\n".join(q) + "\n"
 
 
+DIRECT_DB = None  # (host, password) when --direct-db is used
+
+
 def psql(project, sql, csv=False):
+    if DIRECT_DB:
+        return _direct(sql, csv)
     cmd = ["docker", "compose", "--project-directory", str(ROOT), "-p", project, "exec", "-T", "db",
            "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-U", "tax_product", "-d", "tax_product"] + (["-At", "-F", "|"] if csv else [])
     result = subprocess.run(cmd, input=sql.encode("utf-8"), capture_output=True)
@@ -197,6 +212,18 @@ def psql(project, sql, csv=False):
         sys.stderr.write(result.stderr.decode("utf-8", "replace"))
         raise SystemExit("psql failed")
     return result.stdout.decode("utf-8")
+
+
+def _direct(sql, csv):
+    """Same contract as psql(): csv=True returns rows joined like `psql -At -F '|'`."""
+    import psycopg
+    host, password = DIRECT_DB
+    with psycopg.connect(host=host, port=5432, user="tax_product", dbname="tax_product", password=password,
+                         autocommit=True, connect_timeout=10) as conn:
+        cursor = conn.execute(sql)  # no parameters: multiple statements are allowed
+        if not csv:
+            return ""
+        return "\n".join("|".join("" if v is None else str(v) for v in row) for row in cursor.fetchall())
 
 
 def read_back(project):
@@ -230,13 +257,25 @@ def yuan(c):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--project", required=True, help="Compose project name, e.g. tax-product-p8")
+    parser.add_argument("--project", help="Compose project name, e.g. tax-product-p8 (not needed with --direct-db)")
+    parser.add_argument("--direct-db", action="store_true",
+                        help="connect to the compose `db` service directly (used by start.ps1/start.sh inside the importer image)")
+    parser.add_argument("--db-host", default="db")
     parser.add_argument("--xlsx", type=Path, default=DEFAULT_XLSX,
                         help="official 02_示例数据.xlsx (default: bundled product/data/contest/02_示例数据.xlsx)")
     parser.add_argument("--check-only", action="store_true", help="only read back and compare, write nothing")
     parser.add_argument("--allow-main", action="store_true", help="required to write outside a tax-product-p8* project")
     args = parser.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
+    global DIRECT_DB
+    if args.direct_db:
+        password = read_env(ROOT / ".env")[1].get("PRODUCT_DB_PASSWORD")
+        if not password:
+            raise SystemExit("PRODUCT_DB_PASSWORD missing in .env")
+        DIRECT_DB = (args.db_host, password)
+        args.project = args.project or "direct"
+    elif not args.project:
+        parser.error("--project is required unless --direct-db is used")
     if not args.project.startswith("tax-product-p8") and not args.allow_main and not args.check_only:
         raise SystemExit("Refusing to write outside an isolated tax-product-p8* project without --allow-main")
     names, invoices, bank, published = load_workbook_data(args.xlsx)
@@ -262,7 +301,7 @@ def main():
     print("rules:", *rules, sep="\n  ")
     print("grants:", *grants, sep="\n  ")
     ok &= total_inv == EXPECTED_INVOICES and total_bank == EXPECTED_BANK
-    print("RESULT", "PASS" if ok else "FAIL")
+    print("RESULT", "PASS" if ok else "FAIL", flush=True)
     raise SystemExit(0 if ok else 1)
 
 

@@ -3,3 +3,4 @@ uvicorn==0.34.3
 celery[redis]==5.5.3
 boto3==1.39.17
 openpyxl==3.1.5
+psycopg[binary]==3.2.10

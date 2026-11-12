@@ -57,6 +57,29 @@ class ImporterTest(unittest.TestCase):
         self.assertLess(sql.index("DISABLE TRIGGER"), sql.index("INSERT INTO product_bank_transaction"))
         self.assertLess(sql.index("INSERT INTO product_bank_transaction"), sql.index("ENABLE TRIGGER"))
 
+    def test_direct_db_formats_rows_like_psql(self):
+        calls = []
+        class Cursor:
+            def fetchall(self):
+                return [("C001", "R003", None, 100000)]
+        class Conn:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def execute(self, sql):
+                calls.append(sql)
+                return Cursor()
+        fake = type(sys)("psycopg")
+        fake.connect = lambda **kw: calls.append(kw) or Conn()
+        sys.modules["psycopg"] = fake
+        try:
+            m.DIRECT_DB = ("db", "secret-for-test")
+            self.assertEqual(m.psql("ignored", "SELECT 1", csv=True), "C001|R003||100000")
+            self.assertEqual(m.psql("ignored", "BEGIN; COMMIT;"), "")
+            self.assertEqual((calls[0]["host"], calls[0]["autocommit"]), ("db", True))
+        finally:
+            m.DIRECT_DB = None
+            del sys.modules["psycopg"]
+
     def test_env_passwords_appended_once(self):
         with tempfile.TemporaryDirectory() as d:
             env = Path(d) / ".env"

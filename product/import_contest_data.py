@@ -9,8 +9,9 @@ Re-running inserts only missing rows (ON CONFLICT DO NOTHING) and never overwrit
 Afterwards the DB is read back and per company-month counts and totals are compared with the workbook.
 
 Usage (isolated P8 copy):
-  python product/import_contest_data.py --project tax-product-p8 --xlsx <path to 02_示例数据.xlsx>
-  python product/import_contest_data.py --project tax-product-p8 --xlsx <...> --check-only
+  python product/import_contest_data.py --project tax-product-p8
+  python product/import_contest_data.py --project tax-product-p8 --check-only
+  (--xlsx <path> overrides the bundled product/data/contest/02_示例数据.xlsx)
 """
 import argparse
 import base64
@@ -24,6 +25,8 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent
+# Official 赛题二 v1.1.0 sample workbook, bundled unmodified (see data/contest/README.md).
+DEFAULT_XLSX = ROOT / "data" / "contest" / "02_示例数据.xlsx"
 TENANT = "contest"
 ROLES = {("u001", "C001"): "editor", ("u001", "C002"): "editor", ("u002", "C001"): "viewer"}
 DIRECTIONS = {"收入": "income", "支出": "expense"}
@@ -228,7 +231,8 @@ def yuan(c):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--project", required=True, help="Compose project name, e.g. tax-product-p8")
-    parser.add_argument("--xlsx", required=True, type=Path)
+    parser.add_argument("--xlsx", type=Path, default=DEFAULT_XLSX,
+                        help="official 02_示例数据.xlsx (default: bundled product/data/contest/02_示例数据.xlsx)")
     parser.add_argument("--check-only", action="store_true", help="only read back and compare, write nothing")
     parser.add_argument("--allow-main", action="store_true", help="required to write outside a tax-product-p8* project")
     args = parser.parse_args()

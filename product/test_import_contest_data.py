@@ -1,5 +1,6 @@
 """Offline unit test for import_contest_data.py (no Docker needed): python -m unittest product/test_import_contest_data.py"""
 import datetime as dt
+import hashlib
 import os
 from pathlib import Path
 import sys
@@ -8,6 +9,9 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import import_contest_data as m
+
+# SHA-256 of 02_示例数据.xlsx inside 赛题二：财税Harness初赛材料包-v1.1.0 (unmodified).
+OFFICIAL_SHA256 = "edb13b2a52d2f875033258836e8fc23c3e1353c46d101184048bac289e52ed0f"
 
 
 class ImporterTest(unittest.TestCase):
@@ -63,9 +67,14 @@ class ImporterTest(unittest.TestCase):
             self.assertEqual((first, again), (second, []))
             self.assertTrue(env.read_text(encoding="utf-8").startswith("A=1\n"))
 
-    @unittest.skipUnless(os.getenv("CONTEST_XLSX"), "set CONTEST_XLSX to the official 02_示例数据.xlsx")
+    def test_default_xlsx_is_the_bundled_official_workbook(self):
+        self.assertEqual(m.DEFAULT_XLSX, Path(m.__file__).resolve().parent / "data" / "contest" / "02_示例数据.xlsx")
+        self.assertTrue(m.DEFAULT_XLSX.is_file(), "bundled official workbook missing")
+        self.assertEqual(hashlib.sha256(m.DEFAULT_XLSX.read_bytes()).hexdigest(), OFFICIAL_SHA256)
+
     def test_official_workbook_matches_its_summary(self):
-        names, invoices, bank, published = m.load_workbook_data(os.environ["CONTEST_XLSX"])
+        # Bundled copy by default; CONTEST_XLSX can point at another copy of the official pack.
+        names, invoices, bank, published = m.load_workbook_data(os.getenv("CONTEST_XLSX") or m.DEFAULT_XLSX)
         self.assertEqual((len(invoices), len(bank)), (40, 48))
         computed = m.summarize(invoices, bank)
         for key, value in published.items():
